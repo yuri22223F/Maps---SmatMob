@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Pontos de Fuga com Rotas</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-color: #818cf8; /* Indigo-400 from Tailwind */
+            --yellow-route: #facc15; /* Yellow-400 */
+            --black-route: #1f2937; /* Gray-800 */
+            --shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            --success-color: #22c55e;
+            --error-color: #ef4444;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #111827; /* Fundo escuro para transições */
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
+        
+        .leaflet-routing-container {
+            display: none;
+        }
+
+        .map-emoji-icon {
+            font-size: 28px;
+            text-shadow: var(--shadow);
+            background: rgba(17, 24, 39, 0.7); /* bg-gray-900/70 */
+            backdrop-filter: blur(5px);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Estilo base para painéis com efeito de vidro */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7); /* bg-gray-900/70 */
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            color: #e5e7eb; /* gray-200 */
+        }
+        
+        .panel-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Painel de Controle de Rotas */
+        .routing-panel {
+            padding: 15px;
+            width: 280px;
+        }
+        
+        .panel-title {
+            margin-top: 0;
+            font-size: 1.2em;
+            font-weight: 700;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .routing-panel input[type="text"], .panel-select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-sizing: border-box;
+            font-size: 0.9em;
+            color: white;
+        }
+        .routing-panel input[type="text"]::placeholder { color: #9ca3af; }
+        
+        .panel-select option {
+            background-color: #1f2937; /* Gray-800 */
+        }
+        
+        .panel-button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-button:hover { background: #6366f1; }
+        
+        #clear-route-btn {
+            background-color: rgba(239, 68, 68, 0.8); /* red-500 */
+            border-color: rgba(239, 68, 68, 0);
+        }
+        #clear-route-btn:hover {
+            background-color: rgba(239, 68, 68, 1);
+        }
+        
+        .color-picker { color: #d1d5db; }
+        .color-picker input { accent-color: var(--primary-color); }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Painel de Pontos Próximos */
+        .nearby-panel {
+            padding: 15px;
+            width: 280px;
+        }
+
+        .nearby-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 150px; 
+            overflow-y: auto;
+            font-size: 0.9em;
+        }
+        .nearby-list::-webkit-scrollbar { width: 5px; }
+        .nearby-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 5px; }
+
+
+        .nearby-list li {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .nearby-list li:last-child { border-bottom: none; }
+        .nearby-list li:hover { background-color: rgba(255, 255, 255, 0.1); }
+        
+        .nearby-list .distance {
+            display: block;
+            font-size: 0.8em;
+            color: #9ca3af; /* gray-400 */
+            margin-top: 4px;
+        }
+
+        /* Resumo da Viagem */
+        .trip-summary {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.9em;
+            color: var(--secondary-color);
+            line-height: 1.6;
+        }
+        .trip-summary strong {
+            color: white;
+        }
+
+        /* Botão de Voltar */
+        .back-button {
+            position: absolute; top: 20px; right: 130px; z-index: 1001; padding: 10px 15px;
+            font-weight: bold; text-decoration: none; transition: all 0.2s ease;
+        }
+        .back-button:hover { transform: scale(1.05); }
+
+        /* Notificações */
+        #notification-container {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 2000; display: flex; flex-direction: column; gap: 10px;
+        }
+        .notification {
+            padding: 15px 20px; border-radius: 8px; color: white;
+            opacity: 0; transform: translateY(20px); animation: fadeIn 0.5s forwards;
+        }
+        .notification.success { background-color: var(--success-color); }
+        .notification.error { background-color: var(--error-color); }
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+
+        /* Estilo do controle de camadas do Leaflet */
+        .leaflet-control-layers {
+            border-radius: 8px !important; background-color: rgba(17, 24, 39, 0.7) !important;
+            backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow); color: #e5e7eb;
+        }
+
+        /* --- Estilos do Assistente Zipy --- */
+        .zipy-assistant {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        #zipy-mic-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow);
+        }
+
+        .zipy-status-box {
+            padding: 15px;
+            width: 250px;
+            min-height: 30px;
+            font-size: 0.9em;
+        }
+
+        #zipy-status-text {
+            color: var(--secondary-color);
+            margin: 0;
+        }
+        
+        /* Animação de Ondas */
+        .wave-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 8px;
+            padding-bottom: 10px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        .wave-container.listening {
+            opacity: 1;
+        }
+
+        .wave-bar {
+            width: 12px;
+            height: 5px;
+            border-radius: 5px;
+            background: linear-gradient(to top, var(--primary-color), var(--secondary-color));
+            animation: wave 1.2s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+        .wave-bar:nth-child(6) { animation-delay: 0.5s; }
+        .wave-bar:nth-child(7) { animation-delay: 0.6s; }
+        .wave-bar:nth-child(8) { animation-delay: 0.7s; }
+
+        @keyframes wave {
+            0% { height: 5px; }
+            50% { height: 60px; }
+            100% { height: 5px; }
+        }
+
+        /* ... (Restante do CSS inalterado) ... */
+        .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:1002;display:flex;justify-content:center;align-items:center;opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}.modal-overlay.visible{opacity:1;visibility:visible}.modal-container{width:90%;max-width:450px;max-height:85vh;overflow-y:auto;padding:25px;transform:scale(.9);transition:transform .3s}.modal-overlay.visible .modal-container{transform:scale(1)}.modal-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.2);padding-bottom:10px;margin-bottom:15px}.modal-header h2{margin:0;font-size:1.5em;font-weight:700}.modal-header .emoji-title{font-size:2em;margin-right:10px}.close-button{background:none;border:none;font-size:2em;cursor:pointer;color:#9ca3af;line-height:1;transition:color .2s}.close-button:hover{color:#fff}.form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:700;color:#d1d5db}.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px;border-radius:6px;background-color:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);box-sizing:border-box;font-size:1em;color:#fff}.form-group input::placeholder,.form-group textarea::placeholder{color:#9ca3af}.form-button{width:100%;padding:12px;background:var(--primary-color);color:#fff;border:none;border-radius:8px;font-size:1.1em;font-weight:700;cursor:pointer;transition:background-color .2s}.form-button:hover{background:#6366f1}.rating-stars{display:inline-flex;flex-direction:row-reverse;justify-content:flex-end}.rating-stars input{display:none}.rating-stars label{font-size:2em;color:#4b5563;cursor:pointer;transition:color .2s}.rating-stars input:checked~label,.rating-stars label:hover,.rating-stars label:hover~label{color:#facc15}h3{margin-top:20px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:5px;font-weight:700}.comments-list{list-style:none;padding:0}.comment-item{background:rgba(255,255,255,.05);padding:10px;border-radius:6px;margin-bottom:10px;border-left:4px solid var(--primary-color)}.comment-item p{margin:0;color:#d1d5db}.comment-item .stars{color:#facc15;margin-bottom:5px}.average-rating{font-size:1.1em;font-weight:700;color:#d1d5db}.average-rating .stars{color:#facc15}
+
+        /* Seção de IA no Modal */
+        .ai-features { margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.2); }
+        .ai-features h3 { margin-top: 0; text-align: center; }
+        .ai-buttons { display: flex; gap: 10px; margin-bottom: 15px; }
+        .ai-button { flex: 1; font-size: 0.8em; padding: 8px; background-color: rgba(129, 140, 248, 0.5); }
+        .ai-button:hover { background-color: var(--primary-color); }
+        .ai-response { background-color: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; min-height: 50px; font-size: 0.9em; line-height: 1.6; color: var(--secondary-color); display: flex; justify-content: center; align-items: center; white-space: pre-wrap; }
+        #ai-response-text { margin: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    <div id="notification-container"></div>
+    
+    <a href="index.html" class="back-button glass-panel">← Voltar</a>
+
+    <div class="panel-container">
+        <div class="routing-panel glass-panel">
+            <h3 class="panel-title">Calcular Rota com IA</h3>
+            <div class="control-group">
+                <input type="text" id="start-location-input" placeholder="Início (ex: minha localização)">
+                <input type="text" id="end-location-input" placeholder="Destino (ex: Parque Ibirapuera)">
+            </div>
+            <div class="control-group">
+                <button id="calculate-route-ai-btn" class="panel-button">
+                    <span id="btn-text">Calcular Rota</span>
+                    <div id="btn-loader" class="loader" style="display: none;"></div>
+                </button>
+            </div>
+            <div class="control-group">
+                <label style="display:block; margin-bottom: 5px; font-weight: bold;">Cor da Rota</label>
+                <div class="color-picker">
+                    <input type="radio" id="color-yellow" name="route-color" value="var(--yellow-route)" checked>
+                    <label for="color-yellow">Amarelo</label>
+                    <input type="radio" id="color-black" name="route-color" value="var(--black-route)">
+                    <label for="color-black">Preto</label>
+                </div>
+            </div>
+            <div class="control-group">
+                <button id="clear-route-btn" class="panel-button">Limpar Rota</button>
+            </div>
+            <div id="trip-summary" class="trip-summary">
+                <!-- A descrição da viagem aparecerá aqui -->
+            </div>
+        </div>
+
+        <div class="nearby-panel glass-panel">
+            <h3 class="panel-title">Pontos Próximos</h3>
+            <div class="control-group">
+                <label for="nearby-filter" style="display:block; margin-bottom: 8px; font-weight: bold;">Filtrar por Categoria</label>
+                <select id="nearby-filter" class="panel-select">
+                    <option value="all">Todas as Categorias</option>
+                    <option value="gas">Posto de gasolina ⛽</option>
+                    <option value="hotel">Hotel 🏨</option>
+                    <option value="water">Água 💧</option>
+                    <option value="food">Restaurante 🍴</option>
+                    <option value="mechanic">Oficina Mecânica 🛠️</option>
+                    <option value="parking">Estacionamento 🅿️</option>
+                    <option value="tire_repair">Borracharia ⚙️</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button id="find-nearby-btn" class="panel-button">
+                    <span id="nearby-btn-text">Encontrar Perto de Mim</span>
+                    <div id="nearby-btn-loader" class="loader" style="display: none;"></div>
+                </button>
+            </div>
+            <ul id="nearby-list" class="nearby-list">
+                <!-- Resultados serão inseridos aqui -->
+            </ul>
+        </div>
+    </div>
+    
+    <div class="zipy-assistant">
+        <div id="zipy-status-box" class="zipy-status-box glass-panel">
+            <p id="zipy-status-text">Clique no microfone para ativar a Zipy</p>
+        </div>
+        <button id="zipy-mic-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+        </button>
+    </div>
+    
+    <div id="zipy-wave-container" class="wave-container">
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div>
+    </div>
+
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal-container glass-panel">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center;">
+                    <span id="modal-emoji" class="emoji-title"></span>
+                    <h2 id="modal-title">Detalhes do Ponto</h2>
+                </div>
+                <button class="close-button" id="close-modal">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div id="point-details">
+                    <div id="average-rating-container" class="average-rating"></div>
+                    <h3>Comentários</h3>
+                    <ul id="comments-list" class="comments-list"></ul>
+                    
+                    <div id="ai-features-section" class="ai-features">
+                        <h3>✨ Gemini AI Assistente</h3>
+                        <div class="ai-buttons">
+                            <button id="ai-tips-btn" class="panel-button ai-button">Dicas sobre o Local</button>
+                            <button id="ai-summary-btn" class="panel-button ai-button">Resumir Avaliações</button>
+                        </div>
+                        <div id="ai-response-container" class="ai-response">
+                            <div id="ai-loader" class="loader" style="display: none;"></div>
+                            <p id="ai-response-text"></p>
+                        </div>
+                    </div>
+                </div>
+                <div id="review-section"><h3>Adicionar sua avaliação</h3><form id="review-form"><input type="hidden" id="point-id"><div class="form-group"><label>Sua Nota</label><div class="rating-stars"><input type="radio" id="star5" name="rating" value="5" required/><label for="star5">★</label><input type="radio" id="star4" name="rating" value="4"/><label for="star4">★</label><input type="radio" id="star3" name="rating" value="3"/><label for="star3">★</label><input type="radio" id="star2" name="rating" value="2"/><label for="star2">★</label><input type="radio" id="star1" name="rating" value="1"/><label for="star1">★</label></div></div><div class="form-group"><label for="comment-text">Seu Comentário</label><textarea id="comment-text" rows="3" placeholder="Ex: Banheiros limpos, bom atendimento..."></textarea></div><button type="submit" class="form-button">Enviar Avaliação</button></form></div>
+                <div id="new-point-form-section"><form id="new-point-form"><input type="hidden" id="new-point-lat"><input type="hidden" id="new-point-lng"><div class="form-group"><label for="new-point-name">Nome do Ponto</label><input type="text" id="new-point-name" placeholder="Ex: Posto Shell Km 12" required></div><div class="form-group"><label for="new-point-type">Tipo de Ponto</label><select id="new-point-type" required><option value="gas">Posto de gasolina ⛽</option><option value="hotel">Hotel 🏨</option><option value="water">Água 💧</option><option value="food">Restaurante 🍴</option><option value="mechanic">Oficina Mecânica 🛠️</option><option value="parking">Estacionamento 🅿️</option><option value="tire_repair">Borracharia ⚙️</option></select></div><button type="submit" class="form-button">Adicionar Ponto</button></form></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const tileLayerDefault = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
+            const tileLayerLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' });
+            const tileLayerDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' });
+
+            const mapa = L.map('map', { center: [-23.5505, -46.6333], zoom: 12, layers: [tileLayerDark] });
+            const baseMaps = { "Escuro": tileLayerDark, "Claro": tileLayerLight, "Padrão": tileLayerDefault };
+            L.control.layers(baseMaps).addTo(mapa);
+            
+            let startPoint = null, endPoint = null;
+            let routingControl = null;
+            let userLocationMarker = null;
+            let lastNearbyPoints = [];
+
+            // --- ELEMENTOS DO DOM ---
+            const startLocationInput = document.getElementById('start-location-input');
+            const endLocationInput = document.getElementById('end-location-input');
+            const calculateRouteAiBtn = document.getElementById('calculate-route-ai-btn');
+            const clearRouteBtn = document.getElementById('clear-route-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnLoader = document.getElementById('btn-loader');
+            const notificationContainer = document.getElementById('notification-container');
+            const findNearbyBtn = document.getElementById('find-nearby-btn');
+            const nearbyBtnText = document.getElementById('nearby-btn-text');
+            const nearbyBtnLoader = document.getElementById('nearby-btn-loader');
+            const nearbyList = document.getElementById('nearby-list');
+            const tripSummaryDiv = document.getElementById('trip-summary');
+            const nearbyFilter = document.getElementById('nearby-filter');
+            const zipyMicBtn = document.getElementById('zipy-mic-btn');
+            const zipyStatusText = document.getElementById('zipy-status-text');
+            const zipyWaveContainer = document.getElementById('zipy-wave-container');
+
+            // --- NOVOS DADOS, CATEGORIAS E SISTEMA DE VERSÃO ---
+            const EMOJIS = {
+                gas: '⛽', hotel: '🏨', water: '💧', food: '🍴',
+                mechanic: '🛠️', parking: '🅿️', tire_repair: '⚙️'
+            };
+
+            const currentDataVersion = '1.4'; // Versão atual dos dados. Mude isso para forçar a atualização.
+
+            const defaultPontosDeFuga = [
+                // Centro
+                { id: 1, lat: -23.5613, lng: -46.6565, type: 'food', name: 'Restaurante na Paulista', ratings: [{stars: 5, comment: "Comida excelente!"}, {stars: 4, comment: "Bom, mas um pouco caro."}] },
+                { id: 2, lat: -23.5505, lng: -46.6333, type: 'gas', name: 'Posto Central (Sé)', ratings: [{stars: 3, comment: "Preço na média."}] },
+                { id: 3, lat: -23.5475, lng: -46.6361, type: 'hotel', name: 'Hotel Conforto (República)', ratings: [] },
+                { id: 4, lat: -23.5550, lng: -46.6400, type: 'water', name: 'Bica d\'água (Bela Vista)', ratings: [{stars: 5, comment: "Água fresca e potável."}]},
+                { id: 13, lat: -23.5525, lng: -46.6665, type: 'mechanic', name: 'Auto Elétrico Pacaembu', ratings: [{stars: 4, comment: "Resolveu meu problema na hora."}]},
+                // Zona Sul
+                { id: 5, lat: -23.6215, lng: -46.7002, type: 'parking', name: 'Estacionamento Morumbi Shopping', ratings: [{stars: 4, comment: "Seguro, mas caro."}]},
+                { id: 9, lat: -23.5882, lng: -46.6580, type: 'water', name: 'Bebedouro Parque Ibirapuera', ratings: [{stars: 4, comment: "Fila nos fins de semana."}]},
+                { id: 10, lat: -23.6265, lng: -46.6565, type: 'hotel', name: 'Ibis Congonhas', ratings: [{stars: 4, comment: "Prático para quem vai viajar."}]},
+                { id: 14, lat: -23.6499, lng: -46.6710, type: 'gas', name: 'Posto Shell - Av. Washington Luís', ratings: [{stars: 3, comment: "Preço elevado."}]},
+                { id: 15, lat: -23.5689, lng: -46.6890, type: 'hotel', name: 'George V - Itaim Bibi', ratings: [{stars: 5, comment: "Luxuoso e confortável."}]},
+                { id: 16, lat: -23.6823, lng: -46.6955, type: 'food', name: 'Churrascaria em Interlagos', ratings: []},
+                { id: 17, lat: -23.6520, lng: -46.7290, type: 'tire_repair', name: 'Borracharia Santo Amaro', ratings: [{stars: 5, comment: "Rápido e barato."}]},
+                // Zona Leste
+                { id: 7, lat: -23.5410, lng: -46.5770, type: 'mechanic', name: 'Oficina Tatuapé Reparos', ratings: [{stars: 5, comment: "Serviço rápido e honesto."}]},
+                { id: 11, lat: -23.5590, lng: -46.6080, type: 'food', name: 'Pizzaria na Mooca', ratings: [{stars: 5, comment: "Pizza tradicional e deliciosa."}]},
+                { id: 18, lat: -23.5450, lng: -46.5330, type: 'parking', name: 'Estacionamento Shopping Aricanduva', ratings: [{stars: 4, comment: "Muitas vagas."}]},
+                { id: 19, lat: -23.5320, lng: -46.4630, type: 'gas', name: 'Posto em Itaquera', ratings: []},
+                { id: 20, lat: -23.5600, lng: -46.5650, type: 'hotel', name: 'Hotel em Anália Franco', ratings: [{stars: 4, comment: "Perto do shopping."}]},
+                { id: 21, lat: -23.5850, lng: -46.5350, type: 'tire_repair', name: 'Borracheiro Vila Matilde', ratings: []},
+                // Zona Oeste
+                { id: 8, lat: -23.5655, lng: -46.6950, type: 'food', name: 'Bar do Juarez - Pinheiros', ratings: [{stars: 5, comment: "Picanha excelente."}]},
+                { id: 22, lat: -23.5360, lng: -46.7450, type: 'parking', name: 'Estacionamento Parque Villa-Lobos', ratings: [{stars: 4, comment: "Bom para passear."}]},
+                { id: 23, lat: -23.5540, lng: -46.7270, type: 'gas', name: 'Posto BR Butantã', ratings: [{stars: 3, comment: "Movimentado."}]},
+                { id: 24, lat: -23.5220, lng: -46.7350, type: 'mechanic', name: 'Mecânica na Lapa', ratings: [{stars: 5, comment: "Confiança total."}]},
+                { id: 25, lat: -23.5780, lng: -46.7120, type: 'hotel', name: 'Hotel em Pinheiros', ratings: []},
+                { id: 26, lat: -23.5580, lng: -46.7580, type: 'food', name: 'Restaurante na Vila Jaguara', ratings: []},
+                // Zona Norte
+                { id: 6, lat: -23.5008, lng: -46.6255, type: 'gas', name: 'Posto Ipiranga Santana', ratings: [{stars: 4, comment: "Bom atendimento."}]},
+                { id: 12, lat: -23.5180, lng: -46.6210, type: 'parking', name: 'Estacionamento Center Norte', ratings: [{stars: 3, comment: "Sempre lotado."}]},
+                { id: 27, lat: -23.4860, lng: -46.6450, type: 'food', name: 'Restaurante no Tucuruvi', ratings: [{stars: 4, comment: "Comida caseira."}]},
+                { id: 28, lat: -23.4600, lng: -46.6300, type: 'mechanic', name: 'Oficina no Jaçanã', ratings: []},
+                { id: 29, lat: -23.4990, lng: -46.6980, type: 'hotel', name: 'Hotel na Freguesia do Ó', ratings: []},
+                { id: 30, lat: -23.4750, lng: -46.7080, type: 'tire_repair', name: 'Borracharia em Pirituba', ratings: [{stars: 4, comment: "Me salvou na emergência."}]}
+            ];
+            
+            let pontosDeFuga;
+            const savedDataVersion = localStorage.getItem('pontosDeFugaVersion');
+            const savedPontos = localStorage.getItem('pontosDeFuga');
+
+            if (savedDataVersion === currentDataVersion && savedPontos) {
+                pontosDeFuga = JSON.parse(savedPontos);
+            } else {
+                pontosDeFuga = defaultPontosDeFuga;
+                localStorage.setItem('pontosDeFuga', JSON.stringify(pontosDeFuga));
+                localStorage.setItem('pontosDeFugaVersion', currentDataVersion);
+            }
+
+            let markersLayer=L.layerGroup().addTo(mapa);const modal=document.getElementById('modal');const closeModalBtn=document.getElementById('close-modal');const modalTitle=document.getElementById('modal-title');const modalEmoji=document.getElementById('modal-emoji');const pointDetailsSection=document.getElementById('point-details');const reviewSection=document.getElementById('review-section');const newPointFormSection=document.getElementById('new-point-form-section');const reviewForm=document.getElementById('review-form');const newPointForm=document.getElementById('new-point-form');const saveData=()=>{localStorage.setItem('pontosDeFuga',JSON.stringify(pontosDeFuga))};const renderMarkers=()=>{markersLayer.clearLayers();pontosDeFuga.forEach(ponto=>{const customIcon=L.divIcon({className:'map-emoji-icon',html:EMOJIS[ponto.type]||'📍',iconSize:[40,40],iconAnchor:[20,20]});const marker=L.marker([ponto.lat,ponto.lng],{icon:customIcon}).addTo(markersLayer);marker.on('click',()=>{showPointDetails(ponto.id)})})};const calculateAverageRating=ratings=>{if(!ratings||ratings.length===0)return{avg:0,count:0};const total=ratings.reduce((acc,r)=>acc+r.stars,0);const avg=total/ratings.length;return{avg:avg.toFixed(1),count:ratings.length}};const getStarsHTML=(rating,color='#facc15')=>{let html='';const fullStars=Math.floor(rating);const halfStar=rating%1!==0;for(let i=0;i<fullStars;i++)html+='★';if(halfStar)html+='½';const emptyStars=5-Math.ceil(rating);for(let i=0;i<emptyStars;i++)html+='☆';return`<span class="stars" style="color: ${color};">${html}</span>`};
+            
+            const showPointDetails = pointId => {
+                const ponto = pontosDeFuga.find(p => p.id === pointId);
+                if(!ponto) return;
+                modalTitle.textContent = ponto.name;
+                modalEmoji.textContent = EMOJIS[ponto.type];
+                document.getElementById('point-id').value = pointId;
+                const ratingInfo = calculateAverageRating(ponto.ratings);
+                const avgContainer = document.getElementById('average-rating-container');
+                if(ratingInfo.count > 0){
+                    avgContainer.innerHTML = `${getStarsHTML(ratingInfo.avg)} ${ratingInfo.avg} de 5 (${ratingInfo.count} avaliações)`
+                } else {
+                    avgContainer.innerHTML = 'Este ponto ainda não foi avaliado.'
+                }
+                const commentsList = document.getElementById('comments-list');
+                commentsList.innerHTML = '';
+                if (ponto.ratings && ponto.ratings.length > 0) {
+                    ponto.ratings.forEach(rating => {
+                        if(rating.comment && rating.comment.trim() !== ''){
+                            const li = document.createElement('li');
+                            li.className = 'comment-item';
+                            li.innerHTML = `<div class="stars">${getStarsHTML(rating.stars)}</div><p>${rating.comment}</p>`;
+                            commentsList.appendChild(li);
+                        }
+                    });
+                } else {
+                    commentsList.innerHTML = '<li>Nenhum comentário ainda. Seja o primeiro!</li>';
+                }
+
+                const aiTipsBtn = document.getElementById('ai-tips-btn');
+                const aiSummaryBtn = document.getElementById('ai-summary-btn');
+                const aiResponseText = document.getElementById('ai-response-text');
+
+                aiResponseText.innerHTML = '';
+                aiSummaryBtn.style.display = (ponto.ratings && ponto.ratings.length > 1) ? 'flex' : 'none';
+
+                const handleAiTips = () => getAiTips(ponto);
+                const handleAiSummary = () => summarizeReviews(ponto);
+
+                aiTipsBtn.removeEventListener('click', aiTipsBtn._handler);
+                aiTipsBtn.addEventListener('click', handleAiTips);
+                aiTipsBtn._handler = handleAiTips;
+
+                if (ponto.ratings && ponto.ratings.length > 1) {
+                    aiSummaryBtn.removeEventListener('click', aiSummaryBtn._handler);
+                    aiSummaryBtn.addEventListener('click', handleAiSummary);
+                    aiSummaryBtn._handler = handleAiSummary;
+                }
+                
+                pointDetailsSection.style.display = 'block';
+                reviewSection.style.display = 'block';
+                newPointFormSection.style.display = 'none';
+                modal.classList.add('visible');
+            };
+
+            const showNewPointForm=latlng=>{modalTitle.textContent='Adicionar Novo Ponto';modalEmoji.textContent='📍';document.getElementById('new-point-lat').value=latlng.lat;document.getElementById('new-point-lng').value=latlng.lng;pointDetailsSection.style.display='none';reviewSection.style.display='none';newPointFormSection.style.display='block';newPointForm.reset();modal.classList.add('visible')};const closeModal=()=>{modal.classList.remove('visible');reviewForm.reset();newPointForm.reset()};closeModalBtn.addEventListener('click',closeModal);modal.addEventListener('click',e=>{if(e.target===modal){closeModal()}});reviewForm.addEventListener('submit',e=>{e.preventDefault();const pointId=parseInt(document.getElementById('point-id').value);const ratingValue=reviewForm.querySelector('input[name="rating"]:checked');const commentText=document.getElementById('comment-text').value;if(!ratingValue){alert('Por favor, selecione uma nota de 1 a 5 estrelas.');return}const ponto=pontosDeFuga.find(p=>p.id===pointId);if(ponto){ponto.ratings.push({stars:parseInt(ratingValue.value),comment:commentText.trim()});saveData();showPointDetails(pointId);reviewForm.reset()}});newPointForm.addEventListener('submit',e=>{e.preventDefault();const newPoint={id:Date.now(),lat:parseFloat(document.getElementById('new-point-lat').value),lng:parseFloat(document.getElementById('new-point-lng').value),name:document.getElementById('new-point-name').value,type:document.getElementById('new-point-type').value,ratings:[]};pontosDeFuga.push(newPoint);saveData();renderMarkers();closeModal()});
+            mapa.on('click', (e) => showNewPointForm(e.latlng));
+            
+            // --- FUNÇÕES GERAIS E DE ROTA ---
+            const showNotification = (message, type = 'success') => {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                notificationContainer.appendChild(notification);
+                setTimeout(() => { notification.remove(); }, 4000);
+            };
+
+            const getCurrentLocation = () => {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) {
+                        reject(new Error("Geolocalização não é suportada por este navegador."));
+                    } else {
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+                            () => reject(new Error("Não foi possível obter a sua localização. Verifique as permissões do navegador."))
+                        );
+                    }
+                });
+            };
+
+            // --- LÓGICA DE IA (GEMINI) ---
+            const callGeminiForText = async (prompt, targetElement) => {
+                const loader = targetElement.previousElementSibling?.querySelector('.loader') || document.getElementById('ai-loader');
+                if (loader) loader.style.display = 'block';
+                targetElement.textContent = '';
+                try {
+                    const apiKey = "AIzaSyB61n_-BSNpavD9sMxxJTVtFfB4VhvGs4Q"; // Chave da API do Google AI Studio
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                    
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }] }],
+                         tools: [{ "google_search": {} }],
+                    };
+
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!response.ok) { throw new Error("A IA não conseguiu responder no momento."); }
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) { 
+                        targetElement.textContent = text;
+                        return text;
+                    } 
+                    else { throw new Error("Resposta da IA inválida."); }
+                } catch (error) {
+                    targetElement.textContent = error.message;
+                    return null;
+                } finally {
+                    if (loader) loader.style.display = 'none';
+                }
+            };
+            
+            // --- LÓGICA DO ASSISTENTE ZIPY ---
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            let recognition;
+            let isListening = false;
+            let isProcessing = false;
+
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.lang = 'pt-BR';
+                recognition.interimResults = true;
+
+                recognition.onresult = (event) => {
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            const transcript = event.results[i][0].transcript.trim().toLowerCase();
+                            if (transcript.includes('zipy') && !isProcessing) {
+                                const query = transcript.split('zipy')[1]?.trim();
+                                if (query) {
+                                    askZipy(query);
+                                }
+                            }
+                        }
+                    }
+                };
+
+                recognition.onend = () => {
+                    if (isListening) {
+                        recognition.start();
+                    }
+                };
+            } else {
+                zipyMicBtn.style.display = 'none';
+                zipyStatusText.textContent = 'Reconhecimento de voz não suportado.';
+            }
+
+            const speak = (text) => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR';
+                speechSynthesis.speak(utterance);
+            };
+
+            const askZipy = async (query) => {
+                isProcessing = true;
+                zipyStatusText.textContent = `Zipy está pensando sobre: "${query}"...`;
+                const prompt = `Você é Zipy, uma assistente de IA em um mapa de São Paulo. Responda à pergunta do usuário sobre uma localização na cidade, buscando informações atuais na internet. Seja concisa e informativa. Pergunta: "${query}"`;
+                const responseText = await callGeminiForText(prompt, zipyStatusText);
+                if (responseText) {
+                    speak(responseText);
+                }
+                isProcessing = false;
+            };
+
+            zipyMicBtn.addEventListener('click', () => {
+                if (isListening) {
+                    recognition.stop();
+                    isListening = false;
+                    zipyWaveContainer.classList.remove('listening');
+                    zipyStatusText.textContent = 'Clique no microfone para ativar a Zipy';
+                } else {
+                    try {
+                        recognition.start();
+                        isListening = true;
+                        zipyWaveContainer.classList.add('listening');
+                        zipyStatusText.textContent = 'Ouvindo... Diga "Zipy" e sua pergunta.';
+                    } catch(e) {
+                        showNotification('O reconhecimento de voz já foi iniciado.', 'error');
+                    }
+                }
+            });
+
+            const getAiTips = (ponto) => {
+                const prompt = `Você é um guia turístico local de São Paulo. Dê uma dica rápida ou curiosidade interessante sobre o local '${ponto.name}' ou a área ao redor. Mantenha a resposta curta, em um parágrafo, e útil para um motorista ou viajante.`;
+                callGeminiForText(prompt, document.getElementById('ai-response-text'));
+            };
+
+            const summarizeReviews = (ponto) => {
+                const comments = ponto.ratings.map(r => r.comment).filter(c => c && c.trim() !== '');
+                if (comments.length === 0) {
+                    document.getElementById('ai-response-text').textContent = "Não há comentários para resumir.";
+                    return;
+                }
+                const prompt = `Resuma os seguintes comentários de usuários sobre "${ponto.name}". Identifique os pontos positivos e negativos mais comuns mencionados. Seja conciso e apresente em um formato de lista com marcadores (bullet points). Comentários: ${JSON.stringify(comments)}`;
+                callGeminiForText(prompt, document.getElementById('ai-response-text'));
+            };
+
+            const toggleRouteLoading = (isLoading) => {
+                btnText.style.display = isLoading ? 'none' : 'block';
+                btnLoader.style.display = isLoading ? 'block' : 'none';
+                calculateRouteAiBtn.disabled = isLoading;
+            };
+
+            const geocodeAddressWithAI = async (address) => {
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const prompt = `Você é um especialista em geocodificação. Para o endereço fornecido, encontre as coordenadas geográficas (latitude e longitude) mais precisas possíveis. Considere que o endereço está na cidade de São Paulo, Brasil, para desambiguação. Retorne a resposta apenas no formato JSON. Exemplo de entrada: "Avenida Paulista, 1578". Exemplo de saída: {"lat": -23.5614, "lng": -46.6564}. Processe esta entrada: "${address}"`;
+                const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { lat: { type: "NUMBER" }, lng: { type: "NUMBER" } } } } };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) { throw new Error("Erro ao comunicar com a IA."); }
+                const result = await response.json();
+                const jsonText = result.candidates[0].content.parts[0].text;
+                return JSON.parse(jsonText);
+            };
+
+            const getCoordinatesForLocation = async (locationText) => {
+                const isCurrentLocation = locationText.toLowerCase().includes('minha localização') || locationText.toLowerCase().includes('localização atual');
+                if (isCurrentLocation) {
+                    return await getCurrentLocation();
+                } else {
+                    return await geocodeAddressWithAI(locationText);
+                }
+            };
+            
+            const calculateRouteWithAI = async () => {
+                const startText = startLocationInput.value.trim();
+                const endText = endLocationInput.value.trim();
+                if (!startText || !endText) { showNotification("Por favor, preencha o início e o destino.", "error"); return; }
+                
+                toggleRouteLoading(true);
+                try {
+                    const startCoords = await getCoordinatesForLocation(startText);
+                    const endCoords = await getCoordinatesForLocation(endText);
+                    
+                    if (!startCoords || !endCoords || !startCoords.lat || !endCoords.lat) {
+                        throw new Error("Não foi possível encontrar as coordenadas para um ou ambos os locais.");
+                    }
+                    
+                    startPoint = L.latLng(startCoords.lat, startCoords.lng);
+                    endPoint = L.latLng(endCoords.lat, endCoords.lng);
+
+                    calculateRoute();
+                    showNotification("Rota calculada com sucesso!");
+                } catch (error) {
+                    showNotification(error.message, "error");
+                    console.error(error);
+                } finally {
+                    toggleRouteLoading(false);
+                }
+            };
+            
+            const calculateRoute = () => {
+                tripSummaryDiv.innerHTML = ''; // Limpa o sumário anterior
+                if (routingControl) mapa.removeControl(routingControl);
+
+                if (startPoint && endPoint) {
+                    const selectedColorRadio = document.querySelector('input[name="route-color"]:checked');
+                    const colorValue = selectedColorRadio.value;
+                    const routeColor = colorValue.startsWith('var') ? getComputedStyle(document.documentElement).getPropertyValue(colorValue.match(/--[a-z-]+/)[0]).trim() : colorValue;
+                    
+                    routingControl = L.Routing.control({
+                        waypoints: [startPoint, endPoint],
+                        routeWhileDragging: false,
+                        addWaypoints: false,
+                        lineOptions: { styles: [{ color: routeColor, opacity: 0.8, weight: 6 }] }
+                    });
+
+                    routingControl.on('routesfound', function(e) {
+                        const summary = e.routes[0].summary;
+                        const distance = (summary.totalDistance / 1000).toFixed(2);
+                        
+                        const totalSeconds = summary.totalTime;
+                        const hours = Math.floor(totalSeconds / 3600);
+                        const minutes = Math.round((totalSeconds % 3600) / 60);
+                        
+                        let timeString = '';
+                        if (hours > 0) {
+                            timeString += `${hours}h `;
+                        }
+                        timeString += `${minutes}min`;
+
+                        tripSummaryDiv.innerHTML = `
+                            <strong>Distância:</strong> ${distance} km<br>
+                            <strong>Tempo estimado:</strong> ${timeString}
+                        `;
+                    }).addTo(mapa);
+                    
+                    mapa.fitBounds(L.latLngBounds(startPoint, endPoint), { padding: [50, 50] });
+                }
+            };
+            
+            // --- LÓGICA DE PONTOS PRÓXIMOS COM FILTRO ---
+            const toggleNearbyLoading = (isLoading) => {
+                nearbyBtnText.style.display = isLoading ? 'none' : 'block';
+                nearbyBtnLoader.style.display = isLoading ? 'block' : 'none';
+                findNearbyBtn.disabled = isLoading;
+            };
+
+            const displayNearbyPoints = (points) => {
+                nearbyList.innerHTML = '';
+                if (points.length === 0) { 
+                    nearbyList.innerHTML = '<li>Nenhum ponto encontrado para esta categoria.</li>';
+                    return; 
+                }
+                points.forEach(item => {
+                    const li = document.createElement('li');
+                    const distanceKm = (item.distance / 1000).toFixed(2);
+                    li.innerHTML = `${EMOJIS[item.ponto.type]} ${item.ponto.name}<span class="distance">${distanceKm} km de distância</span>`;
+                    li.addEventListener('click', () => {
+                        mapa.flyTo([item.ponto.lat, item.ponto.lng], 16);
+                        showPointDetails(item.ponto.id);
+                    });
+                    nearbyList.appendChild(li);
+                });
+            };
+
+            const updateNearbyListDisplay = () => {
+                if (lastNearbyPoints.length === 0) return;
+
+                const filterValue = nearbyFilter.value;
+                let filteredPoints;
+
+                if (filterValue === 'all') {
+                    filteredPoints = lastNearbyPoints;
+                } else {
+                    filteredPoints = lastNearbyPoints.filter(item => item.ponto.type === filterValue);
+                }
+
+                const closestPoints = filteredPoints.slice(0, 5);
+                displayNearbyPoints(closestPoints);
+            };
+
+            const findNearbyPoints = async () => {
+                toggleNearbyLoading(true);
+                nearbyList.innerHTML = '<li>Buscando sua localização...</li>';
+                try {
+                    const coords = await getCurrentLocation();
+                    const userLatLng = L.latLng(coords.lat, coords.lng);
+                    if (userLocationMarker) { mapa.removeLayer(userLocationMarker); }
+                    userLocationMarker = L.marker(userLatLng).addTo(mapa).bindPopup('Você está aqui!').openPopup();
+                    mapa.flyTo(userLatLng, 14);
+                    
+                    const distances = pontosDeFuga.map(ponto => {
+                        const pontoLatLng = L.latLng(ponto.lat, ponto.lng);
+                        return { ponto, distance: userLatLng.distanceTo(pontoLatLng) };
+                    });
+
+                    lastNearbyPoints = distances.sort((a, b) => a.distance - b.distance);
+                    updateNearbyListDisplay(); // Usa a nova função para filtrar e mostrar
+
+                    showNotification('Pontos próximos encontrados!');
+                } catch (error) {
+                    showNotification(error.message, 'error');
+                    nearbyList.innerHTML = `<li>${error.message}</li>`;
+                } finally {
+                    toggleNearbyLoading(false);
+                }
+            };
+
+            // --- EVENT LISTENERS ---
+            calculateRouteAiBtn.addEventListener('click', calculateRouteWithAI);
+            clearRouteBtn.addEventListener('click', () => { 
+                if (routingControl) { mapa.removeControl(routingControl); routingControl = null; } 
+                startPoint = null; endPoint = null; 
+                startLocationInput.value = '';
+                endLocationInput.value = '';
+                if(userLocationMarker) { mapa.removeLayer(userLocationMarker); userLocationMarker = null; }
+                tripSummaryDiv.innerHTML = '';
+            });
+            findNearbyBtn.addEventListener('click', findNearbyPoints);
+            nearbyFilter.addEventListener('change', updateNearbyListDisplay);
+
+
+            // --- INICIALIZAÇÃO ---
+            renderMarkers();
+        });
+    </script>
+</body>
+</html>
+
