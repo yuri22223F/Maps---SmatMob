@@ -206,7 +206,7 @@
 
         /* Botão de Voltar */
         .back-button {
-            position: absolute; top: 20px; right: 130px; z-index: 1001; padding: 10px 15px;
+            position: absolute; top: 20px; right: 20px; z-index: 1001; padding: 10px 15px;
             font-weight: bold; text-decoration: none; transition: all 0.2s ease;
         }
         .back-button:hover { transform: scale(1.05); }
@@ -241,6 +241,12 @@
             align-items: center;
             gap: 15px;
         }
+        
+        .zipy-control-box {
+            padding: 15px;
+            width: 280px;
+            text-align: center;
+        }
 
         #zipy-mic-btn {
             width: 60px;
@@ -256,16 +262,10 @@
             box-shadow: var(--shadow);
         }
 
-        .zipy-status-box {
-            padding: 15px;
-            width: 250px;
-            min-height: 30px;
-            font-size: 0.9em;
-        }
-
         #zipy-status-text {
             color: var(--secondary-color);
             margin: 0;
+            min-height: 20px; /* Espaço para o texto de status */
         }
         
         /* Animação de Ondas */
@@ -390,8 +390,8 @@
     </div>
     
     <div class="zipy-assistant">
-        <div id="zipy-status-box" class="zipy-status-box glass-panel">
-            <p id="zipy-status-text">Clique no microfone para ativar a Zipy</p>
+        <div id="zipy-control-box" class="zipy-control-box glass-panel">
+            <p id="zipy-status-text">Clique no microfone para falar com a Zipy</p>
         </div>
         <button id="zipy-mic-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
@@ -443,13 +443,28 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            
+            // =================================================================
+            // ===================  CONFIGURAÇÃO IMPORTANTE  ===================
+            // COLOQUE SUA CHAVE DA API DO GOOGLE AI STUDIO AQUI
+            // 1. Visite https://aistudio.google.com/app/apikey
+            // 2. Crie uma chave de API e copie.
+            // 3. Cole a chave entre as aspas abaixo.
+            // =================================================================
+            const apiKey = "AIzaSyC9TtwVKz0MNeqb-ojbeUrMOWOQR8YaYXM"; 
+            // =================================================================
 
-            const tileLayerDefault = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
+            // --- CONFIGURAÇÃO DO MAPA ---
+            const tileLayerCleanDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            });
             const tileLayerLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' });
-            const tileLayerDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' });
+            const tileLayerDefault = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
 
-            const mapa = L.map('map', { center: [-23.5505, -46.6333], zoom: 12, layers: [tileLayerDark] });
-            const baseMaps = { "Escuro": tileLayerDark, "Claro": tileLayerLight, "Padrão": tileLayerDefault };
+            const mapa = L.map('map', { center: [-23.5505, -46.6333], zoom: 12, layers: [tileLayerCleanDark] });
+            const baseMaps = { "Clean Dark": tileLayerCleanDark, "Claro": tileLayerLight, "Padrão": tileLayerDefault };
             L.control.layers(baseMaps).addTo(mapa);
             
             let startPoint = null, endPoint = null;
@@ -616,11 +631,19 @@
 
             // --- LÓGICA DE IA (GEMINI) ---
             const callGeminiForText = async (prompt, targetElement) => {
-                const loader = targetElement.previousElementSibling?.querySelector('.loader') || document.getElementById('ai-loader');
-                if (loader) loader.style.display = 'block';
-                targetElement.textContent = '';
+                if (!apiKey || apiKey === "SUA_CHAVE_API_AQUI") {
+                    const errorMsg = "Chave da API não configurada. Insira sua chave no código.";
+                    targetElement.textContent = errorMsg;
+                    showNotification(errorMsg, 'error');
+                    return null;
+                }
+
+                const loader = document.createElement('div');
+                loader.className = 'loader';
+                targetElement.innerHTML = '';
+                targetElement.appendChild(loader);
+
                 try {
-                    const apiKey = "AIzaSyB61n_-BSNpavD9sMxxJTVtFfB4VhvGs4Q"; // Chave da API do Google AI Studio
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                     
                     const payload = {
@@ -640,8 +663,6 @@
                 } catch (error) {
                     targetElement.textContent = error.message;
                     return null;
-                } finally {
-                    if (loader) loader.style.display = 'none';
                 }
             };
             
@@ -678,16 +699,18 @@
                 };
             } else {
                 zipyMicBtn.style.display = 'none';
-                zipyStatusText.textContent = 'Reconhecimento de voz não suportado.';
+                zipyStatusText.textContent = 'Voz não suportada neste navegador.';
             }
 
             const speak = (text) => {
+                speechSynthesis.cancel(); // Cancela falas anteriores
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'pt-BR';
                 speechSynthesis.speak(utterance);
             };
 
             const askZipy = async (query) => {
+                if (!query) return;
                 isProcessing = true;
                 zipyStatusText.textContent = `Zipy está pensando sobre: "${query}"...`;
                 const prompt = `Você é Zipy, uma assistente de IA em um mapa de São Paulo. Responda à pergunta do usuário sobre uma localização na cidade, buscando informações atuais na internet. Seja concisa e informativa. Pergunta: "${query}"`;
@@ -699,11 +722,15 @@
             };
 
             zipyMicBtn.addEventListener('click', () => {
+                if (!recognition) {
+                    showNotification('Reconhecimento de voz não é suportado neste navegador.', 'error');
+                    return;
+                }
                 if (isListening) {
                     recognition.stop();
                     isListening = false;
                     zipyWaveContainer.classList.remove('listening');
-                    zipyStatusText.textContent = 'Clique no microfone para ativar a Zipy';
+                    zipyStatusText.textContent = 'Clique no microfone para falar com a Zipy';
                 } else {
                     try {
                         recognition.start();
@@ -738,7 +765,8 @@
             };
 
             const geocodeAddressWithAI = async (address) => {
-                const apiKey = ""; 
+                if (!apiKey || apiKey === "SUA_CHAVE_API_AQUI") { throw new Error("Chave da API não configurada."); }
+
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 const prompt = `Você é um especialista em geocodificação. Para o endereço fornecido, encontre as coordenadas geográficas (latitude e longitude) mais precisas possíveis. Considere que o endereço está na cidade de São Paulo, Brasil, para desambiguação. Retorne a resposta apenas no formato JSON. Exemplo de entrada: "Avenida Paulista, 1578". Exemplo de saída: {"lat": -23.5614, "lng": -46.6564}. Processe esta entrada: "${address}"`;
                 const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { lat: { type: "NUMBER" }, lng: { type: "NUMBER" } } } } };
