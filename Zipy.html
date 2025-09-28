@@ -90,12 +90,12 @@
             max-width: 600px;
             margin: 0 auto 30px;
         }
-
+        
         .cta-buttons {
             display: flex;
             justify-content: center;
             gap: 20px;
-            flex-wrap: wrap; /* Para telas menores */
+            flex-wrap: wrap;
         }
 
         .cta-button {
@@ -116,7 +116,7 @@
             transform: translateY(-3px);
             box-shadow: 0 7px 25px rgba(129, 140, 248, 0.5);
         }
-
+        
         .cta-button.secondary {
             background-color: transparent;
             border: 2px solid var(--primary-color);
@@ -249,7 +249,7 @@
                 <h1>Encontre os melhores <span class="highlight">pontos de parada</span> na sua rota.</h1>
                 <p>O mapa interativo para motoristas. Localize postos, restaurantes, hotéis e pontos de água com avaliações reais de outros usuários.</p>
                 <div class="cta-buttons">
-                    <a href="Maps.html" class="cta-button">Abrir o Mapa Interativo</a>
+                    <a href="index.html" class="cta-button">Abrir o Mapa Interativo</a>
                     <a href="Site grupo Gabriel.html" class="cta-button secondary">Ver Projeto RoadFeed</a>
                 </div>
             </div>
@@ -265,7 +265,7 @@
                 <div class="label">Avaliações de Usuários</div>
             </div>
             <div class="stat-card glass-panel">
-                <div class="number">4</div>
+                <div id="total-categories" class="number">0</div>
                 <div class="label">Categorias Disponíveis</div>
             </div>
         </section>
@@ -291,39 +291,42 @@
         <section class="featured-points container">
             <h2 class="section-title">Pontos em Destaque</h2>
             <div id="featured-grid" class="featured-grid">
-                <!-- Cards de destaque serão inseridos aqui via JS -->
-            </div>
+                </div>
         </section>
 
     </main>
     
     <footer>
         <div class="container">
-            <p>&copy; 2024 Pontos de Fuga. Uma ferramenta para facilitar suas viagens.</p>
+            <p>&copy; 2024 Zipy. Uma ferramenta para facilitar suas viagens.</p>
         </div>
     </footer>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Dados padrão, caso o localStorage esteja vazio
+            const EMOJIS = {
+                gas: '⛽', hotel: '🏨', water: '💧', food: '🍴',
+                mechanic: '🛠️', parking: '🅿️', tire_repair: '⚙️'
+            };
+
             const defaultPoints = [
-                { id: 1, lat: -23.5613, lng: -46.6565, type: 'food', name: 'Restaurante na Paulista', ratings: [{stars: 5, comment: "Comida excelente!"}, {stars: 4, comment: "Bom, mas um pouco caro."}] },
-                { id: 2, lat: -23.5505, lng: -46.6333, type: 'gas', name: 'Posto Central', ratings: [{stars: 3, comment: "Preço na média."}] },
-                { id: 3, lat: -23.5475, lng: -46.6361, type: 'hotel', name: 'Hotel Conforto', ratings: [] },
-                { id: 4, lat: -23.5550, lng: -46.6400, type: 'water', name: 'Bica d\'água', ratings: [{stars: 5, comment: "Água fresca e potável."}]}
+                { id: 1, type: 'food', name: 'Restaurante na Paulista', ratings: [{stars: 5}, {stars: 4}] },
+                { id: 2, type: 'gas', name: 'Posto Central', ratings: [{stars: 3}] },
+                { id: 3, type: 'hotel', name: 'Hotel Conforto', ratings: [] },
+                { id: 4, type: 'water', name: 'Bica d\'água', ratings: [{stars: 5}]}
             ];
             
             const pontosDeFuga = JSON.parse(localStorage.getItem('pontosDeFuga')) || defaultPoints;
-
-            const EMOJIS = { gas: '⛽', hotel: '🏨', water: '💧', food: '🍴' };
 
             // --- FUNÇÃO PARA ATUALIZAR ESTATÍSTICAS ---
             const updateStats = () => {
                 const totalPoints = pontosDeFuga.length;
                 const totalReviews = pontosDeFuga.reduce((acc, ponto) => acc + ponto.ratings.length, 0);
+                const totalCategories = Object.keys(EMOJIS).length;
 
                 document.getElementById('total-points').textContent = totalPoints;
                 document.getElementById('total-reviews').textContent = totalReviews;
+                document.getElementById('total-categories').textContent = totalCategories;
             };
 
             // --- FUNÇÃO PARA MOSTRAR PONTOS EM DESTAQUE ---
@@ -331,7 +334,6 @@
                 const featuredGrid = document.getElementById('featured-grid');
                 if (!featuredGrid) return;
                 
-                // Embaralha e pega 3 pontos aleatórios
                 const shuffled = [...pontosDeFuga].sort(() => 0.5 - Math.random());
                 const selectedPoints = shuffled.slice(0, 3);
                 
@@ -344,7 +346,7 @@
                     card.className = 'featured-card glass-panel';
                     card.innerHTML = `
                         <div class="featured-card-header">
-                            <div class="icon">${EMOJIS[ponto.type]}</div>
+                            <div class="icon">${EMOJIS[ponto.type] || '📍'}</div>
                             <div class="name">${ponto.name}</div>
                         </div>
                         <div class="rating">${ratingText}</div>
@@ -360,4 +362,3 @@
     </script>
 </body>
 </html>
-
