@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Rota</title>
+    <title>Calculadora de Rota com Assistente IA</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -20,6 +20,8 @@
         :root {
             --primary-color: #4f46e5; /* Indigo-600 */
             --shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            --success-color: #22c55e;
+            --error-color: #ef4444;
         }
 
         body, html {
@@ -163,12 +165,35 @@
             margin-top: 10px;
             white-space: pre-wrap;
         }
+        
+        #notification-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .notification {
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 0.5s forwards;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .notification.error { background-color: var(--error-color); }
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
 
     </style>
 </head>
 <body>
 
     <div id="map"></div>
+    <div id="notification-container"></div>
     
     <div class="panel-container">
         <div class="glass-panel">
@@ -222,14 +247,31 @@
             const apiKey = "AIzaSyC9TtwVKz0MNeqb-ojbeUrMOWOQR8YaYXM"; 
             // =================================================================
 
-            const mapa = L.map('map').setView([-23.5505, -46.6333], 12);
-
             const tileLayerDefault = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            }).addTo(mapa);
+            });
+            const tileLayerDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+	            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            });
+            const tileLayerMinimal = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+	            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            });
+
+            const mapa = L.map('map').setView([-23.5505, -46.6333], 12);
+            tileLayerDefault.addTo(mapa);
+
+            const baseMaps = {
+                "Padrão": tileLayerDefault,
+                "Escuro": tileLayerDark,
+                "Minimalista": tileLayerMinimal
+            };
+
+            L.control.layers(baseMaps).addTo(mapa);
+
 
             let startPoint = null, endPoint = null;
             let routingControl = null;
+            let currentRoutes = [];
 
             const startLocationInput = document.getElementById('start-location-input');
             const endLocationInput = document.getElementById('end-location-input');
@@ -248,49 +290,18 @@
             
             let availableVoices = [];
 
-            // --- SIMULAÇÃO DE TRÂNSITO ---
-            const heavyTrafficLayer = L.layerGroup();
-            const moderateTrafficLayer = L.layerGroup();
-
-            const drawTrafficSegment = async (startAddr, endAddr, layer, color) => {
-                const startCoords = await geocodeAddress(startAddr);
-                const endCoords = await geocodeAddress(endAddr);
-
-                if (startCoords && endCoords) {
-                    const tempRouting = L.Routing.control({
-                        waypoints: [
-                            L.latLng(startCoords.lat, startCoords.lng),
-                            L.latLng(endCoords.lat, endCoords.lng)
-                        ],
-                        createMarker: () => null, // Não cria marcadores de início/fim
-                        lineOptions: { styles: [{opacity: 0}] } // Torna a linha invisível
-                    });
-
-                    tempRouting.on('routesfound', function(e) {
-                        const route = e.routes[0];
-                        if (route) {
-                            L.polyline(route.coordinates, { color: color, weight: 6, opacity: 0.7 }).addTo(layer);
-                        }
-                    }).addTo(mapa);
-                }
+            // --- NOTIFICAÇÕES ---
+            const showNotification = (message, type = 'error') => {
+                const notificationContainer = document.getElementById('notification-container');
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                notificationContainer.appendChild(notification);
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    setTimeout(() => notification.remove(), 500);
+                }, 5000);
             };
-
-            const drawTrafficSimulation = () => {
-                // Marginal Tietê
-                drawTrafficSegment("Ponte das Bandeiras, São Paulo", "Ponte Aricanduva, São Paulo", heavyTrafficLayer, 'red');
-                // Avenida dos Bandeirantes
-                drawTrafficSegment("Viaduto Santo Amaro, São Paulo", "Avenida Washington Luís, 800, São Paulo", heavyTrafficLayer, 'red');
-                // Avenida Paulista
-                drawTrafficSegment("Avenida Paulista, 2500, São Paulo", "Avenida Paulista, 1, São Paulo", moderateTrafficLayer, 'yellow');
-                // Avenida 23 de Maio
-                drawTrafficSegment("Viaduto do Chá, São Paulo", "Viaduto General Euclides de Figueiredo, São Paulo", moderateTrafficLayer, 'yellow');
-            };
-
-            const trafficOverlay = {
-                "Trânsito": L.layerGroup([heavyTrafficLayer, moderateTrafficLayer])
-            };
-
-            L.control.layers(null, trafficOverlay).addTo(mapa);
 
             // --- GEOCODIFICAÇÃO COM NOMINATIM ---
             const geocodeAddress = async (address) => {
@@ -298,14 +309,18 @@
                     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ", São Paulo, Brasil")}`;
                     const response = await fetch(url, { headers: { "User-Agent": "meu-mapa-teste" } });
                     const data = await response.json();
+
                     if (data.length === 0) {
-                        console.warn(`Endereço não encontrado: "${address}"`);
-                        return null;
+                        throw new Error(`Não foi possível encontrar o endereço: "${address}"`);
                     }
-                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+
+                    return {
+                        lat: parseFloat(data[0].lat),
+                        lng: parseFloat(data[0].lon)
+                    };
                 } catch (error) {
                     console.error("Erro no Nominatim:", error);
-                    return null;
+                    throw error; // Re-lança o erro para ser tratado pela função que chamou
                 }
             };
 
@@ -336,21 +351,21 @@
             const calculateRouteWithNominatim = async () => {
                 const startText = startLocationInput.value.trim();
                 const endText = endLocationInput.value.trim();
-                if (!startText || !endText) { alert("Por favor, preencha o início e o destino."); return; }
+                if (!startText || !endText) { 
+                    showNotification("Por favor, preencha o início e o destino.", 'error'); 
+                    return; 
+                }
 
                 try {
                     const startCoords = await getCoordinatesForLocation(startText);
-                    if (!startCoords) { alert(`Não foi possível encontrar o local de partida: "${startText}"`); return; }
-
                     const endCoords = await getCoordinatesForLocation(endText);
-                    if (!endCoords) { alert(`Não foi possível encontrar o local de destino: "${endText}"`); return; }
-
+                    
                     startPoint = L.latLng(startCoords.lat, startCoords.lng);
                     endPoint = L.latLng(endCoords.lat, endCoords.lng);
 
                     calculateRoute();
                 } catch (error) {
-                    alert(error.message);
+                    showNotification(error.message, 'error');
                     console.error(error);
                 }
             };
@@ -364,24 +379,38 @@
                         waypoints: [startPoint, endPoint],
                         routeWhileDragging: false,
                         addWaypoints: false,
-                        lineOptions: { styles: [{ color: "#4f46e5", opacity: 0.8, weight: 6 }] }
+                        showAlternatives: true, 
+                        lineOptions: {
+                            styles: [{ color: "#4f46e5", opacity: 0.8, weight: 7 }],
+                            extendToWaypoints: true,
+                            missingRouteTolerance: 10
+                        },
+                        altLineOptions: {
+                           styles: [{ color: 'gray', opacity: 0.5, weight: 5 }]
+                        }
                     });
 
                     routingControl.on('routesfound', function(e) {
+                        currentRoutes = e.routes;
                         const summary = e.routes[0].summary;
-                        const distance = (summary.totalDistance / 1000).toFixed(2);
-                        const totalSeconds = summary.totalTime;
-                        const hours = Math.floor(totalSeconds / 3600);
-                        const minutes = Math.round((totalSeconds % 3600) / 60);
-                        let timeString = '';
-                        if (hours > 0) timeString += `${hours}h `;
-                        timeString += `${minutes}min`;
-                        tripSummaryDiv.innerHTML = `<strong>Distância:</strong> ${distance} km<br><strong>Tempo estimado:</strong> ${timeString}`;
+                        updateTripSummary(summary);
+                        readOutInstructions(e.routes[0].instructions);
                     }).addTo(mapa);
 
                     mapa.fitBounds(L.latLngBounds(startPoint, endPoint), { padding: [50, 50] });
                 }
             };
+            
+            const updateTripSummary = (summary) => {
+                const distance = (summary.totalDistance / 1000).toFixed(2);
+                const totalSeconds = summary.totalTime;
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.round((totalSeconds % 3600) / 60);
+                let timeString = '';
+                if (hours > 0) timeString += `${hours}h `;
+                timeString += `${minutes}min`;
+                tripSummaryDiv.innerHTML = `<strong>Distância:</strong> ${distance} km<br><strong>Tempo estimado:</strong> ${timeString}`;
+            }
 
             // --- LÓGICA DA ANÁLISE DE IMAGEM E VOZ ---
             const populateVoiceList = () => {
@@ -440,7 +469,7 @@
                  if (!apiKey || apiKey === "SUA_CHAVE_API_AQUI") {
                     const errorMsg = "Chave da API não configurada. Insira sua chave no código.";
                     aiAnalysisText.textContent = errorMsg;
-                    alert(errorMsg);
+                    showNotification(errorMsg, 'error');
                     return;
                 }
 
@@ -453,7 +482,7 @@
                     contents: [{
                         parts: [
                             { text: prompt },
-                            { inline_data: { mime_type: "image/jpeg", data: base64Data } }
+                            { inlineData: { mimeType: "image/jpeg", data: base64Data } }
                         ]
                     }]
                 };
@@ -466,9 +495,7 @@
                         body: JSON.stringify(payload)
                     });
 
-                    if (!response.ok) {
-                        throw new Error("A IA não conseguiu analisar a imagem no momento.");
-                    }
+                    if (!response.ok) throw new Error("A IA não conseguiu analisar a imagem.");
 
                     const result = await response.json();
                     let text = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -477,15 +504,92 @@
                         const cleanedText = text.replace(/[\*\_]/g, '');
                         aiAnalysisText.textContent = cleanedText;
                         speak(cleanedText);
+                        
+                        if (cleanedText.toLowerCase().includes('intenso') || cleanedText.toLowerCase().includes('congestionado')) {
+                            recalculateRoute();
+                        }
+
                     } else {
                         throw new Error("Resposta da IA inválida.");
                     }
+
                 } catch (error) {
                     aiAnalysisText.textContent = error.message;
                     console.error(error);
                 } finally {
                     aiAnalysisLoader.style.display = 'none';
                 }
+            };
+            
+            const recalculateRoute = () => {
+                if (routingControl && currentRoutes && currentRoutes.length > 1) {
+                    speak("Trânsito intenso detectado. A recalcular para uma rota mais rápida.");
+                    routingControl.setWaypoints(currentRoutes[1].waypoints);
+                } else {
+                    speak("Nenhuma rota alternativa foi encontrada. Sugerimos manter o percurso atual.");
+                }
+            };
+
+            const readOutInstructions = (instructions) => {
+                speechSynthesis.cancel();
+                let i = 0;
+
+                const translations = {
+                    "Turn left": "Vire à esquerda",
+                    "Turn right": "Vire à direita",
+                    "Keep left": "Mantenha-se à esquerda",
+                    "Keep right": "Mantenha-se à direita",
+                    "Go straight": "Siga em frente",
+                    "Head": "Siga na direção",
+                    "Enter the roundabout": "Entre na rotunda",
+                    "and take the": "e apanhe a",
+                    "exit": "saída",
+                    "onto": "na",
+                    "on": "na",
+                    "You have arrived at your destination": "Você chegou ao seu destino"
+                };
+
+                const formatDistance = (meters) => {
+                    if (meters < 1) return "";
+                    if (meters < 1000) {
+                        const roundedMeters = Math.round(meters / 10) * 10;
+                        return `e continue por ${roundedMeters} metros`;
+                    } else {
+                        const km = (meters / 1000).toFixed(1).replace('.', ',');
+                        return `e continue por ${km} quilómetros`;
+                    }
+                };
+
+                function nextInstruction() {
+                    if (i < instructions.length) {
+                        const instruction = instructions[i];
+                        let translatedText = instruction.text;
+                        
+                        // Substituições simples
+                        for (const [en, pt] of Object.entries(translations)) {
+                            translatedText = translatedText.replace(new RegExp(`\\b${en}\\b`, 'gi'), pt);
+                        }
+                        
+                        const distanceText = formatDistance(instruction.distance);
+                        
+                        let finalInstruction = translatedText;
+                        if (instruction.type !== 'Arrive') {
+                            finalInstruction += ` ${distanceText}.`;
+                        }
+
+                        const utterance = new SpeechSynthesisUtterance(finalInstruction);
+                        const selectedVoiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
+                        const selectedVoice = availableVoices.find(voice => voice.name === selectedVoiceName);
+                        if (selectedVoice) utterance.voice = selectedVoice;
+                        utterance.lang = 'pt-BR';
+                        utterance.onend = () => {
+                            i++;
+                            setTimeout(nextInstruction, 1000); // Pausa entre instruções
+                        };
+                        speechSynthesis.speak(utterance);
+                    }
+                }
+                nextInstruction();
             };
 
 
@@ -497,11 +601,10 @@
                 startLocationInput.value = '';
                 endLocationInput.value = '';
                 tripSummaryDiv.innerHTML = '';
+                currentRoutes = [];
+                speechSynthesis.cancel();
             });
-
-            // --- INICIALIZAÇÃO ---
-            drawTrafficSimulation();
-
+            
         });
     </script>
 </body>
