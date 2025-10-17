@@ -187,6 +187,43 @@
         }
         .notification.error { background-color: var(--error-color); }
         @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+        /* ===== Navegação: 1 botão ===== */
+        :root{
+        --primary-color:#4f46e5;
+        --shadow:0 4px 15px rgba(0,0,0,.1);
+        }
+        .panel-container.nav-one-btn{
+        position:absolute; top:20px; left:20px; z-index:1001;
+        display:flex; flex-direction:column; gap:15px;
+        max-height:calc(100vh - 40px); overflow-y:auto;
+        }
+        .glass-panel{
+        background:rgba(255,255,255,.85);
+        backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+        border:1px solid rgba(0,0,0,.1); border-radius:12px;
+        box-shadow:var(--shadow); color:#18181b; padding:15px;
+        width:300px; box-sizing:border-box;
+        }
+        .panel-title{
+        margin:0 0 15px; font-size:1.2em; font-weight:700; text-align:center;
+        border-bottom:1px solid rgba(0,0,0,.1); padding-bottom:10px;
+        }
+        .panel-button{
+        width:100%; padding:10px; margin-bottom:5px; border:none;
+        background:var(--primary-color); color:#fff; border-radius:8px;
+        cursor:pointer; font-weight:700; transition:.2s;
+        display:flex; justify-content:center; align-items:center; gap:8px;
+        }
+        .panel-button:hover{ background:#4338ca; }
+        /* remove o sublinhado do link-botão em qualquer estado */
+        .panel-button,
+        .panel-button:link,
+        .panel-button:visited,
+        .panel-button:hover,
+        .panel-button:focus,
+        .panel-button:active {
+        text-decoration: none !important;
+        }
 
     </style>
 </head>
@@ -194,9 +231,19 @@
 
     <div id="map"></div>
     <div id="notification-container"></div>
-    
+    <!-- Painel de navegação: 1 botão para Maps - Teste2.html -->
+    <div class="panel-container nav-one-btn">
+        <div class="glass-panel">
+        <h3 class="panel-title">Navegar</h3>
+        </div>
+    </div>
+  
     <div class="panel-container">
         <div class="glass-panel">
+            <h3 class="panel-title">Navegar</h3>
+            <a href="Maps%20-%20Teste2.html" class="panel-button" role="button">
+                Abrir Maps - Fugas
+              </a>
             <h3 class="panel-title">Calcular Rota</h3>
             <div class="control-group">
                 <input type="text" id="start-location-input" placeholder="Início (ex: Av. Paulista, 1000)">
@@ -239,6 +286,17 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+                        // Botão de navegação para "Maps - Teste2.html"
+            document.addEventListener('DOMContentLoaded', function () {
+            var btn = document.getElementById('nav-teste2-btn');
+            if (btn) {
+                btn.addEventListener('click', function () {
+                // Abre na mesma aba; troque por window.open('Maps - Teste2.html', '_blank') para abrir em nova aba
+                window.location.href = 'Maps - Teste2.html';
+                });
+            }
+            });
+
 
              // =================================================================
             // ===================  CONFIGURAÇÃO IMPORTANTE  ===================
@@ -609,4 +667,3 @@
     </script>
 </body>
 </html>
-
